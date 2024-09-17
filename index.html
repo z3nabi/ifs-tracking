@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IFS Cs and Ps Tracker</title>
+    <link rel="manifest" href="manifest.json">
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background-color: #f0f0f0; }
+        .section { background-color: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .rating-item { margin-bottom: 15px; }
+        .rating-item label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .rating-item input[type="range"], .rating-item input[type="text"] { width: 100%; margin-bottom: 5px; }
+        button { background-color: #4CAF50; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; margin-right: 10px; margin-bottom: 10px; }
+        button:hover { background-color: #45a049; }
+        .history-item { border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 10px; }
+        .nav-buttons { margin-bottom: 20px; }
+        .nav-buttons button { background-color: #008CBA; }
+        .nav-buttons button:hover { background-color: #007B9A; }
+        .view { display: none; }
+        .view.active { display: block; }
+        #reminderInterval { width: 100%; max-width: 300px; }
+    </style>
+</head>
+<body>
+    <h1>IFS Cs and Ps Tracker</h1>
+    <div class="nav-buttons">
+        <button onclick="showView('tracking')">Tracking</button>
+        <button onclick="showView('history')">History</button>
+        <button onclick="showView('settings')">Settings</button>
+    </div>
+    <div id="trackingView" class="view">
+        <div class="section">
+            <h2>Rate Your Cs and Ps</h2>
+            <div id="rating-items"></div>
+            <button onclick="submitRatings()">Submit Ratings</button>
+        </div>
+    </div>
+    <div id="historyView" class="view">
+        <div class="section">
+            <h2>History and Data Management</h2>
+            <button onclick="exportToCSV()">Export to CSV</button>
+            <input type="file" id="importFile" accept=".csv">
+            <button onclick="importFromCSV()">Import from CSV</button>
+            <button onclick="generateTestData()">Generate Test Data</button>
+            <button onclick="clearHistory()">Clear History</button>
+            <div id="history-items"></div>
+        </div>
+    </div>
+    <div id="settingsView" class="view">
+        <div class="section">
+            <h2>Settings</h2>
+            <label for="reminderInterval">Reminder Interval:</label>
+            <select id="reminderInterval" onchange="updateReminderInterval()">
+                <option value="10">10 seconds (Test)</option>
+                <option value="3600">1 hour</option>
+                <option value="7200">2 hours</option>
+                <option value="14400" selected>4 hours</option>
+                <option value="28800">8 hours</option>
+                <option value="43200">12 hours</option>
+                <option value="86400">24 hours</option>
+                <option value="random">Randomized (1-24 hours)</option>
+            </select>
+            <button onclick="testReminder()">Test Reminder</button>
+        </div>
+    </div>
+    <script>
+        const csAndPs = ["Curiosity", "Compassion", "Calm", "Clarity", "Courage", "Confidence", "Creativity", "Connectedness", "Presence", "Perspective", "Patience", "Persistence", "Playfulness"];
+
+        function showView(viewName) {
+            document.querySelectorAll('.view').forEach(view => view.classList.remove('active'));
+            document.getElementById(`${viewName}View`).classList.add('active');
+            if (viewName === 'history') { updateHistory(); }
+        }
+
+        function getRandomSubset(arr, size) {
+            return arr.sort(() => 0.5 - Math.random()).slice(0, size);
+        }
+
+        function createRatingForm() {
+            document.getElementById('rating-items').innerHTML = getRandomSubset(csAndPs, 5).map(item => `
+                <div class="rating-item">
+                    <label for="${item}">${item}:</label>
+                    <input type="range" min="1" max="5" value="3" id="${item}" oninput="this.nextElementSibling.value = this.value">
+                    <output>3</output>
+                    <input type="text" placeholder="Optional note" id="${item}-note">
+                </div>
+            `).join('');
+        }
+
+        function submitRatings() {
+            const ratings = {};
+            document.querySelectorAll('#rating-items input[type="range"]').forEach(input => {
+                ratings[input.id] = { score: parseInt(input.value), note: document.getElementById(`${input.id}-note`).value };
+            });
+            const history = JSON.parse(localStorage.getItem('ifsHistory') || '[]');
+            history.unshift({ timestamp: new Date().toISOString(), ratings });
+            localStorage.setItem('ifsHistory', JSON.stringify(history));
+            updateHistory();
+            createRatingForm();
+            alert('Ratings submitted successfully!');
+        }
+
+        function formatDate(dateString) {
+            return new Date(dateString).toISOString().slice(0, 16).replace('T', ' ');
+        }
+
+        function updateHistory() {
+            document.getElementById('history-items').innerHTML = JSON.parse(localStorage.getItem('ifsHistory') || '[]').map(entry => `
+                <div class="history-item">
+                    <strong>${formatDate(entry.timestamp)}</strong>
+                    <ul>${Object.entries(entry.ratings).map(([item, { score, note }]) => `
+                        <li>${item}: ${score}${note ? ` - Note: ${note}` : ''}</li>
+                    `).join('')}</ul>
+                </div>
+            `).join('');
+        }
+
+        function exportToCSV() {
+            const history = JSON.parse(localStorage.getItem('ifsHistory') || '[]');
+            const headers = ['Timestamp', ...csAndPs, ...csAndPs.map(attr => `${attr} Note`)];
+            const csvContent = [
+                headers.join(','),
+                ...history.map(entry => [
+                    formatDate(entry.timestamp),
+                    ...csAndPs.map(attr => entry.ratings[attr]?.score || ''),
+                    ...csAndPs.map(attr => entry.ratings[attr]?.note ? `"${entry.ratings[attr].note.replace(/"/g, '""')}"` : '')
+                ].join(','))
+            ].join('\n');
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', 'ifs_tracker_export.csv');
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        }
+
+        function importFromCSV() {
+            const file = document.getElementById('importFile').files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const lines = e.target.result.split('\n');
+                    const headers = lines[0].split(',');
+                    const history = lines.slice(1).map(line => {
+                        const values = line.split(',');
+                        const entry = { timestamp: values[0], ratings: {} };
+                        csAndPs.forEach((attr, index) => {
+                            const score = parseInt(values[index + 1]);
+                            const note = values[index + csAndPs.length + 1].replace(/^"|"$/g, '').replace(/""/g, '"');
+                            if (!isNaN(score)) {
+                                entry.ratings[attr] = { score, note };
+                            }
+                        });
+                        return entry;
+                    });
+                    localStorage.setItem('ifsHistory', JSON.stringify(history));
+                    updateHistory();
+                    alert('Import successful!');
+                };
+                reader.readAsText(file);
+            } else {
+                alert('Please select a file to import.');
+            }
+        }
+
+        function generateTestData() {
+            const testData = Array.from({ length: 30 }, (_, i) => {
+                const date = new Date();
+                date.setDate(date.getDate() - 29 + i);
+                return {
+                    timestamp: date.toISOString(),
+                    ratings: Object.fromEntries(getRandomSubset(csAndPs, 5).map(attr => [
+                        attr,
+                        { score: Math.floor(Math.random() * 5) + 1, note: Math.random() < 0.3 ? `Test note for ${attr}` : '' }
+                    ]))
+                };
+            });
+            localStorage.setItem('ifsHistory', JSON.stringify(testData));
+            updateHistory();
+            alert('Test data generated successfully!');
+        }
+
+        function clearHistory() {
+            if (confirm('Are you sure you want to clear all history? This action cannot be undone.')) {
+                localStorage.removeItem('ifsHistory');
+                updateHistory();
+                alert('History cleared successfully.');
+            }
+        }
+
+        async function setupNotifications() {
+            if ('Notification' in window && 'serviceWorker' in navigator) {
+                try {
+                    const permission = await Notification.requestPermission();
+                    if (permission === 'granted') {
+                        const registration = await navigator.serviceWorker.register('/sw.js');
+                        console.log('ServiceWorker registered');
+                        updateReminderInterval();
+                    } else {
+                        console.log('Notification permission denied');
+                    }
+                } catch (error) {
+                    console.error('ServiceWorker registration failed:', error);
+                }
+            } else {
+                console.log('Notifications or ServiceWorker not supported');
+            }
+        }
+
+        function updateReminderInterval() {
+            const interval = document.getElementById('reminderInterval').value;
+            localStorage.setItem('reminderInterval', interval);
+            if (navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage({
+                    type: 'UPDATE_INTERVAL',
+                    interval: interval
+                });
+            }
+        }
+
+        function testReminder() {
+            if (Notification.permission === 'granted') {
+                new Notification('IFS Tracker Reminder', {
+                    body: "It's time to rate your Cs and Ps!",
+                    icon: 'icon.png'
+                });
+            } else {
+                alert("Notification permission not granted. Please allow notifications and try again.");
+            }
+        }
+
+        // Initial setup
+        createRatingForm();
+        updateHistory();
+        showView('tracking');
+        setupNotifications();
+
+        // Register the PWA
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').then(registration => {
+                    console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                }, err => {
+                    console.log('ServiceWorker registration failed: ', err);
+                });
+            });
+        }
+    </script>
+</body>
+</html>
